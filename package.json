@@ -1,0 +1,19 @@
+{
+  "name": "embeddedci-submit-job-action",
+  "version": "1.0.0",
+  "description": "GitHub Action to submit embeddedci.yaml to EmbeddedCI server",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "ncc build index.js -o dist",
+    "prepare": "npm run build"
+  },
+  "keywords": ["github-action", "embeddedci"],
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^3.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.0"
+  }
+}

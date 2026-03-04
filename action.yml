@@ -1,0 +1,26 @@
+name: 'EmbeddedCI Submit Job'
+description: 'Submit an embeddedci.yaml job definition to the EmbeddedCI server'
+author: 'EmbeddedCI'
+
+inputs:
+  api_key:
+    description: 'API key for EmbeddedCI (use secrets.EMBEDDEDCI_API_KEY)'
+    required: true
+  server:
+    description: 'EmbeddedCI server base URL (e.g. https://api.embeddedci.com)'
+    required: false
+    default: 'https://api.embeddedci.com'
+  definition_file:
+    description: 'Path to the job definition YAML file in the repository'
+    required: false
+    default: 'embeddedci.yaml'
+  name:
+    description: 'Optional job name'
+    required: false
+  ref:
+    description: 'Optional ref (e.g. branch or tag)'
+    required: false
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
