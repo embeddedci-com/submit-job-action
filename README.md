@@ -8,7 +8,7 @@ GitHub Action that submits jobs to the EmbeddedCI server in two modes:
 
 Ensure your workflow checks out the repository first.
 
-### YAML-only mode (backward compatible)
+### YAML-only mode
 
 ```yaml
 jobs:
