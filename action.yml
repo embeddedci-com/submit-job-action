@@ -1,25 +1,33 @@
 name: 'EmbeddedCI Submit Job'
-description: 'Submit an embeddedci.yaml job definition to the EmbeddedCI server'
+description: 'Submit a pipeline definition or source archive to the EmbeddedCI server'
 author: 'EmbeddedCI'
 
 inputs:
   api_key:
     description: 'API key for EmbeddedCI (use secrets.EMBEDDEDCI_API_KEY)'
     required: true
-  server:
+  api_url:
     description: 'EmbeddedCI server base URL (e.g. https://api.embeddedci.com)'
     required: false
     default: 'https://api.embeddedci.com'
-  definition_file:
-    description: 'Path to the job definition YAML file in the repository'
+  source_path:
+    description: 'Path to source archive file OR directory (including ".") for archive mode'
     required: false
-    default: 'embeddedci.yaml'
-  name:
-    description: 'Optional job name'
+    default: ''
+  embeddedci_yaml:
+    description: 'Pipeline YAML path. In YAML-only mode, this is the repo file path. In archive mode, this optionally overrides auto-detection.'
     required: false
-  ref:
-    description: 'Optional ref (e.g. branch or tag)'
-    required: false
+    default: ''
+
+outputs:
+  job_id:
+    description: 'Submitted job id'
+  job_status:
+    description: 'Submitted job status when provided by server'
+  job_builds:
+    description: 'JSON-encoded builds payload when provided by server'
+  source_metadata:
+    description: 'JSON-encoded source metadata when provided by server'
 
 runs:
   using: 'node24'

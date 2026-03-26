@@ -30779,51 +30779,216 @@ function getIDToken(aud) {
 
 
 
+
+
+const SUPPORTED_ARCHIVE_EXTENSIONS = [
+  '.tar.gz',
+  '.tgz',
+  '.tar',
+  '.zip',
+];
+
+function hasSupportedArchiveExtension(filePath) {
+  const lower = filePath.toLowerCase();
+  return SUPPORTED_ARCHIVE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+function normalizeEmbeddedciYamlPath(embeddedciYamlPath) {
+  return embeddedciYamlPath.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function listArchiveEntries(archivePath) {
+  const lower = archivePath.toLowerCase();
+  if (lower.endsWith('.zip')) {
+    return (0,external_child_process_namespaceObject.execFileSync)('unzip', ['-Z', '-1', archivePath], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  return (0,external_child_process_namespaceObject.execFileSync)('tar', ['-tf', archivePath], { encoding: 'utf8' })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function resolveEmbeddedciYamlPath(archiveEntries, embeddedciYamlOverride) {
+  const normalizedEntries = archiveEntries.map(normalizeEmbeddedciYamlPath);
+
+  if (embeddedciYamlOverride) {
+    const override = normalizeEmbeddedciYamlPath(embeddedciYamlOverride);
+    if (!normalizedEntries.includes(override)) {
+      throw new Error(`Pipeline file "${override}" was not found in the archive.`);
+    }
+    return override;
+  }
+
+  const autoCandidates = ['embeddedci.yaml'];
+  for (const candidate of autoCandidates) {
+    if (normalizedEntries.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    'No pipeline file found in archive. Expected "embeddedci.yaml", or set "embeddedci_yaml" explicitly.',
+  );
+}
+
+function createArchiveFromDirectory(directoryPath) {
+  const archivePath = external_path_namespaceObject.join(
+    external_os_namespaceObject.tmpdir(),
+    `embeddedci-${Date.now()}-${Math.random().toString(36).slice(2)}.tar.gz`,
+  );
+
+  // Keep archive creation simple and predictable for runners with BSD/GNU tar.
+  (0,external_child_process_namespaceObject.execFileSync)(
+    'tar',
+    ['-czf', archivePath, '--exclude=.git', '--exclude=node_modules', '--exclude=.cache', '.'],
+    { cwd: directoryPath, stdio: 'pipe' },
+  );
+
+  return archivePath;
+}
+
+async function readJsonSafe(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { _raw: text };
+  }
+}
+
+function applyCommonOutputs(result) {
+  if (result.id) setOutput('job_id', result.id);
+  if (result.status) setOutput('job_status', result.status);
+  if (typeof result.builds !== 'undefined') {
+    setOutput('job_builds', JSON.stringify(result.builds));
+  }
+  if (result.source_metadata) {
+    setOutput('source_metadata', JSON.stringify(result.source_metadata));
+  }
+}
+
+function failWithHttpError(response, result) {
+  const serverMessage =
+    typeof result.error === 'string'
+      ? result.error
+      : typeof result.message === 'string'
+        ? result.message
+        : typeof result._raw === 'string'
+          ? result._raw
+          : JSON.stringify(result);
+  setFailed(`Submit failed (${response.status}): ${serverMessage}`);
+}
+
 async function main() {
   try {
     const apiKey = getInput('api_key', { required: true });
-    const server = getInput('server') || 'https://api.embeddedci.com';
-    const definitionFile = getInput('definition_file') || 'embeddedci.yaml';
-    const name = getInput('name') || undefined;
-    const ref = getInput('ref') || undefined;
+    const apiUrl = getInput('api_url') || 'https://api.embeddedci.com';
+    const embeddedciYamlInput = getInput('embeddedci_yaml') || 'embeddedci.yaml';
+    const sourcePathInput = getInput('source_path');
 
     const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-    const definitionPath = external_path_namespaceObject.resolve(workspace, definitionFile);
+    const baseUrl = apiUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/api/jobs/submit`;
+    const authHeader = { Authorization: `ApiKey ${apiKey}` };
 
+    // Dual-mode behavior: archive mode when source_path is set, otherwise YAML-only JSON mode.
+    if (sourcePathInput) {
+      const sourcePath = external_path_namespaceObject.resolve(workspace, sourcePathInput);
+      if (!external_fs_namespaceObject.existsSync(sourcePath)) {
+        setFailed(`Archive source not found: ${sourcePath}`);
+        return;
+      }
+
+      const stat = external_fs_namespaceObject.statSync(sourcePath);
+      let archivePath = sourcePath;
+      let archiveWasGenerated = false;
+
+      try {
+        if (stat.isDirectory()) {
+          info(`Creating archive from directory: ${sourcePath}`);
+          archivePath = createArchiveFromDirectory(sourcePath);
+          archiveWasGenerated = true;
+        } else if (!stat.isFile()) {
+          setFailed(`Archive source must be a file or directory: ${sourcePath}`);
+          return;
+        }
+
+        if (!hasSupportedArchiveExtension(archivePath)) {
+          setFailed(
+            `Invalid archive extension for "${archivePath}". Supported: ${SUPPORTED_ARCHIVE_EXTENSIONS.join(', ')}`,
+          );
+          return;
+        }
+
+        const archiveEntries = listArchiveEntries(archivePath);
+        const embeddedciYaml = resolveEmbeddedciYamlPath(archiveEntries, getInput('embeddedci_yaml'));
+        info(`Using archive pipeline file: ${embeddedciYaml}`);
+
+          info(`Submitting archive job to ${url}...`);
+          const formData = new FormData();
+          formData.append('archive', new Blob([external_fs_namespaceObject.readFileSync(archivePath)]), external_path_namespaceObject.basename(archivePath));
+          formData.append('embeddedci_yaml', embeddedciYaml);
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: authHeader,
+            body: formData,
+          });
+
+          const result = await readJsonSafe(response);
+          if (!response.ok) {
+            if (response.status === 503) {
+              error('Server reported archive storage as unavailable (503).');
+            }
+            failWithHttpError(response, result);
+            return;
+          }
+
+          info('Archive job submitted successfully.');
+          applyCommonOutputs(result);
+          return;
+        } catch (error) {
+          setFailed(`Archive submit failed: ${error.message}`);
+          return;
+        } finally {
+          if (archiveWasGenerated && external_fs_namespaceObject.existsSync(archivePath)) {
+            external_fs_namespaceObject.unlinkSync(archivePath);
+          }
+        }
+    }
+
+    const definitionPath = external_path_namespaceObject.resolve(workspace, embeddedciYamlInput);
     if (!external_fs_namespaceObject.existsSync(definitionPath)) {
-      setFailed(`Definition file not found: ${definitionPath}`);
+      setFailed(`Pipeline file not found: ${definitionPath}`);
       return;
     }
 
     const definition = external_fs_namespaceObject.readFileSync(definitionPath, 'utf8');
-
     const body = { definition };
-    if (name) body.name = name;
-    if (ref) body.ref = ref;
 
-    const baseUrl = server.replace(/\/$/, '');
-    const url = `${baseUrl}/api/jobs/submit`;
-
-    info(`Submitting job to ${url}...`);
-
+    info(`Submitting YAML job to ${url}...`);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
+        ...authHeader,
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     });
 
+    const result = await readJsonSafe(response);
     if (!response.ok) {
-      const text = await response.text();
-      setFailed(`Submit failed (${response.status}): ${text}`);
+      failWithHttpError(response, result);
       return;
     }
 
-    const result = await response.json().catch(() => ({}));
-    info('Job submitted successfully.');
-    if (result.id) setOutput('job_id', result.id);
+    info('YAML job submitted successfully.');
+    applyCommonOutputs(result);
   } catch (error) {
     setFailed(error.message);
   }
