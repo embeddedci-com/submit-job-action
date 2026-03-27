@@ -46,6 +46,8 @@ jobs:
 | `api_url` | No | `https://api.embeddedci.com` | EmbeddedCI server base URL. Override for self-hosted or staging. |
 | `source_path` | No | empty | Path to what should be uploaded in archive mode. You can pass a directory (including `.`) and the action creates the archive automatically, or pass an existing archive file (`.tar.gz`, `.tgz`, `.tar`, `.zip`). |
 | `embeddedci_yaml` | No | empty | Pipeline YAML path. In YAML-only mode this is the repo file path (defaults to `embeddedci.yaml` when omitted). In archive mode this optionally overrides auto-detection (`embeddedci.yaml`). |
+| `ref` | No | branch name from GitHub context | Ref associated with the submission. Auto-detected from `GITHUB_HEAD_REF` (PRs) or `GITHUB_REF_NAME`. |
+| `commit` | No | `GITHUB_SHA` | Commit SHA associated with the submission. |
 
 ## Examples
 
@@ -85,6 +87,17 @@ jobs:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: firmware/
     embeddedci_yaml: ci/embeddedci.yaml
+```
+
+### Explicit ref and commit metadata (optional)
+
+```yaml
+- uses: embeddedci/submit-job-action@v1
+  with:
+    api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
+    source_path: .
+    ref: ${{ github.ref_name }}
+    commit: ${{ github.sha }}
 ```
 
 ### Use a prebuilt archive file (optional)

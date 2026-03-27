@@ -30932,7 +30932,7 @@ function createArchiveFromDirectory(directoryPath) {
   // Keep archive creation simple and predictable for runners with BSD/GNU tar.
   (0,external_child_process_namespaceObject.execFileSync)(
     'tar',
-    ['-czf', archivePath, '--exclude=.git', '--exclude=node_modules', '--exclude=.cache', '.'],
+    ['-czf', archivePath, '.'],
     { cwd: directoryPath, stdio: 'pipe' },
   );
 
@@ -30978,6 +30978,10 @@ async function main() {
     const apiUrl = getInput('api_url') || 'https://api.embeddedci.com';
     const embeddedciYamlInput = getInput('embeddedci_yaml') || 'embeddedci.yaml';
     const sourcePathInput = getInput('source_path');
+    const refInput = getInput('ref');
+    const commitInput = getInput('commit');
+    const ref = refInput || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
+    const commit = commitInput || process.env.GITHUB_SHA || '';
 
     const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
     const baseUrl = apiUrl.replace(/\/$/, '');
@@ -31021,6 +31025,8 @@ async function main() {
           const formData = new FormData();
           formData.append('archive', new Blob([external_fs_namespaceObject.readFileSync(archivePath)]), external_path_namespaceObject.basename(archivePath));
           formData.append('embeddedci_yaml', embeddedciYaml);
+          if (ref) formData.append('ref', ref);
+          if (commit) formData.append('commit', commit);
 
           const response = await fetch(url, {
             method: 'POST',
@@ -31058,6 +31064,8 @@ async function main() {
 
     const definition = external_fs_namespaceObject.readFileSync(definitionPath, 'utf8');
     const body = { definition };
+    if (ref) body.ref = ref;
+    if (commit) body.commit = commit;
 
     info(`Submitting YAML job to ${url}...`);
     const response = await fetch(url, {

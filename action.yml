@@ -18,6 +18,14 @@ inputs:
     description: 'Pipeline YAML path. In YAML-only mode, this is the repo file path. In archive mode, this optionally overrides auto-detection.'
     required: false
     default: ''
+  ref:
+    description: 'Git ref to associate with the submission. Defaults to branch name from GitHub context.'
+    required: false
+    default: ''
+  commit:
+    description: 'Git commit SHA to associate with the submission. Defaults to current workflow commit SHA.'
+    required: false
+    default: ''
 
 outputs:
   job_id:
