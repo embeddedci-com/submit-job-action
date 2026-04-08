@@ -107,10 +107,17 @@ function failWithHttpError(response, result) {
   core.setFailed(`Submit failed (${response.status}): ${serverMessage}`);
 }
 
+function normalizeApiUrl(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return 'https://api.embeddedci.com';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 async function main() {
   try {
     const apiKey = core.getInput('api_key', { required: true });
-    const apiUrl = core.getInput('api_url') || 'https://api.embeddedci.com';
+    const apiUrl = normalizeApiUrl(core.getInput('api_url'));
     const embeddedciYamlInput = core.getInput('embeddedci_yaml') || 'embeddedci.yaml';
     const sourcePathInput = core.getInput('source_path');
     const refInput = core.getInput('ref');

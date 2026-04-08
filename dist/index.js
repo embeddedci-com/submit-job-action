@@ -30972,10 +30972,17 @@ function failWithHttpError(response, result) {
   setFailed(`Submit failed (${response.status}): ${serverMessage}`);
 }
 
+function normalizeApiUrl(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return 'https://api.embeddedci.com';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 async function main() {
   try {
     const apiKey = getInput('api_key', { required: true });
-    const apiUrl = getInput('api_url') || 'https://api.embeddedci.com';
+    const apiUrl = normalizeApiUrl(getInput('api_url'));
     const embeddedciYamlInput = getInput('embeddedci_yaml') || 'embeddedci.yaml';
     const sourcePathInput = getInput('source_path');
     const refInput = getInput('ref');
