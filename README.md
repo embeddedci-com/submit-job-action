@@ -8,20 +8,10 @@ GitHub Action that submits jobs to the EmbeddedCI server in two modes:
 
 Ensure your workflow checks out the repository first.
 
-### YAML-only mode
+How the modes differ:
 
-```yaml
-jobs:
-  submit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: embeddedci/submit-job-action@v1
-        with:
-          api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
-          embeddedci_yaml: embeddedci.yaml
-```
+- **Archive mode** archives the contents of `source_path` and sends that archive to the server (with `embeddedci_yaml` for which pipeline file to use inside the bundle).
+- **YAML-only mode** sends nothing except the pipeline YAML. Use it when source files are publicly accessible via Git (or similar) as specified inside the YAML, so the server can fetch them without an upload from this action.
 
 ### Archive mode (recommended for repo-based builds)
 
@@ -36,6 +26,22 @@ jobs:
         with:
           api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
           source_path: .
+```
+
+
+### YAML-only mode
+
+```yaml
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: embeddedci/submit-job-action@v1
+        with:
+          api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
+          embeddedci_yaml: embeddedci.yaml
 ```
 
 ## Inputs
