@@ -139,3 +139,50 @@ npm run build
 ```
 
 The built action is in `dist/`. Commit `dist/` so the action works when used from GitHub.
+
+
+## Actions in this repository
+
+| Action | Use it for |
+|---|---|
+| `embeddedci-com/embeddedci-github-action@main` | Submit a pipeline or source archive to the EmbeddedCI build system. |
+| `embeddedci-com/embeddedci-github-action/upload-artifact@main` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
+
+### `upload-artifact`
+
+Records a build you produced in your own workflow as a **GitHub-sourced build** on
+embeddedci.com and attaches the firmware to it. No BenchPod is touched, so it is safe to run
+on every push.
+
+```yaml
+permissions:
+  id-token: write        # required: the action authenticates with the job's OIDC token
+  contents: read
+
+steps:
+  - uses: actions/checkout@v5
+  # ... your existing build ...
+  - uses: embeddedci-com/embeddedci-github-action/upload-artifact@main
+    with:
+      firmware: build/app.elf
+      build_target: stm32f4
+      openocd_target: target/stm32f4x.cfg
+      swclk: "11"
+      swdio: "12"
+      efuse: "1"
+```
+
+The firmware's siblings (`.elf` / `.bin` / `.hex` / `.uf2` with the same stem) are uploaded
+alongside it, and the wiring inputs pre-fill the web UI's flash dialog. The repository must be
+trusted in the EmbeddedCI web app under **BenchPod → GitHub Actions**; without that, or without
+`id-token: write`, the step fails with a message naming what is missing.
+
+Set `allow_missing_token: "true"` to downgrade that failure to a skip — useful for pull requests
+from forks, which cannot mint an OIDC token.
+
+Outputs `build_id`.
+
+Implementation note: this is a composite action wrapping `python -m embeddedci.upload_build` from
+the [embeddedci Python SDK](https://github.com/embeddedci-com/embeddedci-python), which is the same
+code path the pytest `build_report` fixture uses. Keeping one implementation avoids a second copy of
+the OIDC exchange and build API drifting from the server.

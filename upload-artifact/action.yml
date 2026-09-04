@@ -1,0 +1,96 @@
+name: 'EmbeddedCI Upload Firmware Artifact'
+description: 'Publish a built firmware to embeddedci.com so it can be flashed from the web UI'
+author: 'EmbeddedCI'
+
+# Composite rather than a bundled Node action on purpose: the upload protocol (GitHub
+# OIDC minting, session-token exchange, build creation, artifact upload, flash-wiring
+# defaults) already exists and is tested in the Python SDK, and is the same code path the
+# pytest `build_report` fixture uses. Wrapping it keeps one implementation instead of a
+# second one in JavaScript that could drift from the server.
+
+inputs:
+  firmware:
+    description: 'Path to the built firmware (.elf/.bin/.hex). Siblings with the same stem are uploaded too.'
+    required: true
+  build_target:
+    description: 'Platform id recorded against the build, e.g. stm32f4. Shown on the Builds page.'
+    required: false
+    default: ''
+  openocd_target:
+    description: 'OpenOCD target config for the DUT, e.g. target/stm32f4x.cfg. Pre-fills the flash dialog.'
+    required: false
+    default: ''
+  swclk:
+    description: 'LA channel wired to SWCLK (1-12). Pre-fills the flash dialog.'
+    required: false
+    default: ''
+  swdio:
+    description: 'LA channel wired to SWDIO (1-12). Pre-fills the flash dialog.'
+    required: false
+    default: ''
+  nreset:
+    description: 'LA channel wired to NRST. Leave empty when NRST is not wired.'
+    required: false
+    default: ''
+  efuse:
+    description: 'Target-power eFuse rail: 1 = internal 5V, 2 = external.'
+    required: false
+    default: ''
+  name:
+    description: 'Build name shown in the web UI. Defaults to the server-side commit summary.'
+    required: false
+    default: ''
+  api_base:
+    description: 'EmbeddedCI base URL. Defaults to the public server.'
+    required: false
+    default: ''
+  sdk_ref:
+    description: 'Git ref of embeddedci-python to install. Pin this for reproducible runs.'
+    required: false
+    default: 'main'
+  python_version:
+    description: 'Python to set up for the upload step.'
+    required: false
+    default: '3.12'
+  allow_missing_token:
+    description: 'Succeed instead of failing when no OIDC token is available (e.g. a fork PR).'
+    required: false
+    default: 'false'
+
+outputs:
+  build_id:
+    description: 'The embeddedci build id the artifacts were attached to'
+    value: ${{ steps.upload.outputs.build_id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    - name: Install the embeddedci SDK
+      shell: bash
+      run: |
+        pip install --quiet \
+          "embeddedci @ git+https://github.com/embeddedci-com/embeddedci-python.git@${{ inputs.sdk_ref }}#subdirectory=packages/embeddedci"
+
+    - name: Publish firmware to embeddedci
+      id: upload
+      shell: bash
+      env:
+        # Auth is the job's OIDC token; the workflow must grant `id-token: write`.
+        # Failing here with a clear message beats uploading nothing silently.
+        EMBEDDEDCI_ALLOW_MISSING_TOKEN: ${{ inputs.allow_missing_token }}
+      run: |
+        args=(--firmware "${{ inputs.firmware }}")
+        [ -n "${{ inputs.build_target }}" ]   && args+=(--build-target   "${{ inputs.build_target }}")
+        [ -n "${{ inputs.openocd_target }}" ] && args+=(--openocd-target "${{ inputs.openocd_target }}")
+        [ -n "${{ inputs.swclk }}"  ] && args+=(--swclk  "${{ inputs.swclk }}")
+        [ -n "${{ inputs.swdio }}"  ] && args+=(--swdio  "${{ inputs.swdio }}")
+        [ -n "${{ inputs.nreset }}" ] && args+=(--nreset "${{ inputs.nreset }}")
+        [ -n "${{ inputs.efuse }}"  ] && args+=(--efuse  "${{ inputs.efuse }}")
+        [ -n "${{ inputs.name }}"   ] && args+=(--name   "${{ inputs.name }}")
+        [ -n "${{ inputs.api_base }}" ] && args+=(--api-base "${{ inputs.api_base }}")
+        [ "$EMBEDDEDCI_ALLOW_MISSING_TOKEN" = "true" ] && args+=(--allow-missing-token)
+        python -m embeddedci.upload_build "${args[@]}"
