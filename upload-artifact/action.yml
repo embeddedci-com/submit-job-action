@@ -93,4 +93,4 @@ runs:
         [ -n "${{ inputs.name }}"   ] && args+=(--name   "${{ inputs.name }}")
         [ -n "${{ inputs.api_base }}" ] && args+=(--api-base "${{ inputs.api_base }}")
         [ "$EMBEDDEDCI_ALLOW_MISSING_TOKEN" = "true" ] && args+=(--allow-missing-token)
-        python -m embeddedci.upload_build "${args[@]}"
+        embeddedci-upload-build "${args[@]}"

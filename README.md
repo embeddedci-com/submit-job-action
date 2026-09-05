@@ -182,7 +182,7 @@ from forks, which cannot mint an OIDC token.
 
 Outputs `build_id`.
 
-Implementation note: this is a composite action wrapping `python -m embeddedci.upload_build` from
+Implementation note: this is a composite action wrapping the `embeddedci-upload-build` command from
 the [embeddedci Python SDK](https://github.com/embeddedci-com/embeddedci-python), which is the same
 code path the pytest `build_report` fixture uses. Keeping one implementation avoids a second copy of
 the OIDC exchange and build API drifting from the server.
