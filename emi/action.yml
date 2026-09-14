@@ -1,0 +1,92 @@
+name: 'EmbeddedCI EMI Analysis'
+description: 'Run EMI analysis on a KiCad or Gerber board and fail the build on new findings'
+author: 'EmbeddedCI'
+
+# Composite bash rather than a bundled Node action, for the same reason upload-artifact is:
+# there is no second implementation to keep in step with the server. This one talks to the EMI
+# REST API directly with curl and jq, both of which are on every GitHub runner, so there is no
+# build step, no node_modules and nothing to `ncc build` before a change takes effect.
+#
+# Auth is an API key rather than the OIDC token upload-artifact uses. The EMI control plane
+# authenticates a person, not a repository — a run is filed under the organisation that owns the
+# key — and the key must carry the `emi:analyze` scope. Generate one under Settings → API keys.
+
+inputs:
+  api_key:
+    description: 'EmbeddedCI API key with the emi:analyze scope (use secrets.EMBEDDEDCI_API_KEY).'
+    required: true
+  board:
+    description: >-
+      Path to the board to analyse: a .kicad_pcb, or a .zip holding the KiCad project, or a zip
+      of Gerbers + drill + IPC-D-356 netlist. A Gerber zip without the IPC-D-356 netlist is
+      refused by the server — Gerbers carry no net information, so there is nothing to analyse.
+    required: true
+  project:
+    description: >-
+      EMI project name the board is filed under. Boards accumulate in it across runs, which is
+      what makes a comparison against an earlier commit possible. Defaults to the repository name.
+    required: false
+    default: ''
+  source_kind:
+    description: 'kicad or gerber. Inferred from the board file extension when empty.'
+    required: false
+    default: ''
+  fail_on:
+    description: >-
+      Severity that fails the build: critical, warning, or none. "warning" is deliberately not
+      the default — any board of real complexity carries warnings a human has already accepted.
+    required: false
+    default: 'critical'
+  api_base:
+    description: 'EmbeddedCI base URL.'
+    required: false
+    default: 'https://www.embeddedci.com'
+  timeout_seconds:
+    description: 'How long to wait for the ingest and rules run to finish.'
+    required: false
+    default: '300'
+  summary:
+    description: 'Write the findings to the GitHub step summary.'
+    required: false
+    default: 'true'
+
+outputs:
+  run_id:
+    description: 'The EMI run id, for looking the results up in the web UI'
+    value: ${{ steps.emi.outputs.run_id }}
+  board_id:
+    description: 'The board id the findings belong to'
+    value: ${{ steps.emi.outputs.board_id }}
+  project_id:
+    description: 'The EMI project the board was filed under'
+    value: ${{ steps.emi.outputs.project_id }}
+  critical:
+    description: 'Number of critical findings'
+    value: ${{ steps.emi.outputs.critical }}
+  warning:
+    description: 'Number of warning findings'
+    value: ${{ steps.emi.outputs.warning }}
+  info:
+    description: 'Number of informational findings'
+    value: ${{ steps.emi.outputs.info }}
+  rules_json:
+    description: 'Path to the downloaded rules.json, for a later step that wants the detail'
+    value: ${{ steps.emi.outputs.rules_json }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run EMI analysis
+      id: emi
+      shell: bash
+      env:
+        EMI_API_KEY: ${{ inputs.api_key }}
+        EMI_BOARD: ${{ inputs.board }}
+        EMI_PROJECT: ${{ inputs.project }}
+        EMI_SOURCE_KIND: ${{ inputs.source_kind }}
+        EMI_FAIL_ON: ${{ inputs.fail_on }}
+        EMI_API_BASE: ${{ inputs.api_base }}
+        EMI_TIMEOUT: ${{ inputs.timeout_seconds }}
+        EMI_SUMMARY: ${{ inputs.summary }}
+        EMI_DEFAULT_PROJECT: ${{ github.event.repository.name }}
+      run: ${{ github.action_path }}/emi-analyze.sh

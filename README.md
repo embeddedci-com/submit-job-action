@@ -147,6 +147,7 @@ The built action is in `dist/`. Commit `dist/` so the action works when used fro
 |---|---|
 | `embeddedci-com/embeddedci-github-action@main` | Submit a pipeline or source archive to the EmbeddedCI build system. |
 | `embeddedci-com/embeddedci-github-action/upload-artifact@main` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
+| `embeddedci-com/embeddedci-github-action/emi@main` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
 
 ### `upload-artifact`
 
@@ -186,3 +187,61 @@ Implementation note: this is a composite action wrapping the `embeddedci-upload-
 the [embeddedci Python SDK](https://github.com/embeddedci-com/embeddedci-python), which is the same
 code path the pytest `build_report` fixture uses. Keeping one implementation avoids a second copy of
 the OIDC exchange and build API drifting from the server.
+
+### `emi`
+
+Runs the EMI Analyzer's rules tier against a board committed to the repository, annotates the
+findings on the workflow run, and fails the build on the severity you choose. It takes seconds —
+this is the geometric tier, not a full-wave solve — so it is cheap enough for every push that
+touches the layout.
+
+```yaml
+steps:
+  - uses: actions/checkout@v5
+  - uses: embeddedci-com/embeddedci-github-action/emi@main
+    with:
+      api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
+      board: hardware/mainboard.kicad_pcb
+```
+
+Only run it when the layout actually changed, or it will re-analyse an unchanged board on every
+commit:
+
+```yaml
+on:
+  push:
+    paths:
+      - "hardware/**.kicad_pcb"
+```
+
+**Auth is an API key, not the OIDC token** the other actions use. EMI runs are filed under the
+organisation that owns the key, so the credential has to identify a person rather than a
+repository. Generate one in the web app under **Settings → API keys** with the `emi:analyze`
+scope, and store it as a repository secret.
+
+| Input | Default | Notes |
+|---|---|---|
+| `api_key` | *required* | Needs the `emi:analyze` scope. |
+| `board` | *required* | A `.kicad_pcb`, a zip of the KiCad project, or a zip of Gerbers + drill + IPC-D-356 netlist. |
+| `project` | repository name | Boards accumulate under this name across commits, which is what makes a later comparison possible. |
+| `source_kind` | inferred | `kicad` or `gerber`. |
+| `fail_on` | `critical` | `critical`, `warning`, or `none`. |
+| `api_base` | `https://www.embeddedci.com` | |
+| `timeout_seconds` | `300` | |
+| `summary` | `true` | Write the findings table to the job summary. |
+
+Outputs `run_id`, `board_id`, `project_id`, `critical`, `warning`, `info`, and `rules_json` (a
+path to the downloaded findings, for a step that wants the detail).
+
+`fail_on: critical` is the default deliberately. Gating on warnings sounds stricter but is worse
+in practice: a board of any real complexity carries warnings a human has already looked at and
+accepted, and a check that cries wolf on every push gets switched off within the week.
+
+A Gerber upload **must** include an IPC-D-356 netlist. Gerbers carry no net information, so
+without it there is no way to tell a signal trace from its own ground pour — the server refuses
+the upload rather than analysing something meaningless.
+
+Implementation note: a composite action calling the EMI REST API with `curl` and `jq`, both
+already on every runner. Unlike `upload-artifact` there is no SDK to wrap — nothing else
+implements this flow — so there is no second copy to drift, and no build step between editing
+`emi/emi-analyze.sh` and the change taking effect.

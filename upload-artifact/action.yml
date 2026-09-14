@@ -29,7 +29,11 @@ inputs:
     required: false
     default: ''
   nreset:
-    description: 'LA channel wired to NRST. Leave empty when NRST is not wired.'
+    description: >-
+      true when the target's NRST is wired to the pod's reset pin (DUT header
+      J1 pin 22). Leave empty when NRST is not wired. This used to be an LA
+      channel number, before pods had a reset pin of their own; a number is
+      still accepted and read as "wired".
     required: false
     default: ''
   efuse:
