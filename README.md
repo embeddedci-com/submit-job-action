@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: embeddedci/submit-job-action@v1
+      - uses: embeddedci-com/submit-job-action@v1
         with:
           api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
           source_path: .
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: embeddedci/submit-job-action@v1
+      - uses: embeddedci-com/submit-job-action@v1
         with:
           api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
           embeddedci_yaml: embeddedci.yaml
@@ -60,7 +60,7 @@ jobs:
 ### Custom pipeline file and API URL (YAML-only)
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     api_url: https://ci.mycompany.com
@@ -70,7 +70,7 @@ jobs:
 ### Archive from current directory on-the-fly
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: .
@@ -79,7 +79,7 @@ jobs:
 ### Archive from a specific directory on-the-fly
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: firmware/
@@ -88,7 +88,7 @@ jobs:
 ### Override pipeline path inside archive (optional)
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: firmware/
@@ -98,7 +98,7 @@ jobs:
 ### Explicit ref and commit metadata (optional)
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: .
@@ -109,7 +109,7 @@ jobs:
 ### Use a prebuilt archive file (optional)
 
 ```yaml
-- uses: embeddedci/submit-job-action@v1
+- uses: embeddedci-com/submit-job-action@v1
   with:
     api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
     source_path: repo.tar.gz
@@ -145,9 +145,9 @@ The built action is in `dist/`. Commit `dist/` so the action works when used fro
 
 | Action | Use it for |
 |---|---|
-| `embeddedci-com/embeddedci-github-action@main` | Submit a pipeline or source archive to the EmbeddedCI build system. |
-| `embeddedci-com/embeddedci-github-action/upload-artifact@main` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
-| `embeddedci-com/embeddedci-github-action/emi@main` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
+| `embeddedci-com/submit-job-action@main` | Submit a pipeline or source archive to the EmbeddedCI build system. |
+| `embeddedci-com/submit-job-action/upload-artifact@main` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
+| `embeddedci-com/submit-job-action/emi@main` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
 
 ### `upload-artifact`
 
@@ -163,7 +163,7 @@ permissions:
 steps:
   - uses: actions/checkout@v5
   # ... your existing build ...
-  - uses: embeddedci-com/embeddedci-github-action/upload-artifact@main
+  - uses: embeddedci-com/submit-job-action/upload-artifact@main
     with:
       firmware: build/app.elf
       build_target: stm32f4
@@ -183,6 +183,10 @@ from forks, which cannot mint an OIDC token.
 
 Outputs `build_id`.
 
+The step installs the embeddedci SDK from PyPI (`embeddedci==2.5.*`). Set `sdk_ref` to a tag,
+branch or commit of [embeddedci-python](https://github.com/embeddedci-com/embeddedci-python) to
+install that instead, for example to try an unreleased fix.
+
 Implementation note: this is a composite action wrapping the `embeddedci-upload-build` command from
 the [embeddedci Python SDK](https://github.com/embeddedci-com/embeddedci-python), which is the same
 code path the pytest `build_report` fixture uses. Keeping one implementation avoids a second copy of
@@ -198,7 +202,7 @@ touches the layout.
 ```yaml
 steps:
   - uses: actions/checkout@v5
-  - uses: embeddedci-com/embeddedci-github-action/emi@main
+  - uses: embeddedci-com/submit-job-action/emi@main
     with:
       api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
       board: hardware/mainboard.kicad_pcb

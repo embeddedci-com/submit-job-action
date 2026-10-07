@@ -89,4 +89,5 @@ runs:
         EMI_TIMEOUT: ${{ inputs.timeout_seconds }}
         EMI_SUMMARY: ${{ inputs.summary }}
         EMI_DEFAULT_PROJECT: ${{ github.event.repository.name }}
-      run: ${{ github.action_path }}/emi-analyze.sh
+      # Quoted env var rather than an expression in run:, like every input above.
+      run: '"$GITHUB_ACTION_PATH/emi-analyze.sh"'

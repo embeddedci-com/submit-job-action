@@ -49,9 +49,12 @@ inputs:
     required: false
     default: ''
   sdk_ref:
-    description: 'Git ref of embeddedci-python to install. Pin this for reproducible runs.'
+    description: >-
+      Git ref (tag, branch or commit) of embeddedci-python to install instead of the pinned
+      PyPI release (embeddedci==2.5.*), e.g. to try an unreleased fix. Pin a tag or a commit
+      for reproducible runs. Empty (the default) installs the PyPI release.
     required: false
-    default: 'main'
+    default: ''
   python_version:
     description: 'Python to set up for the upload step.'
     required: false
@@ -73,11 +76,20 @@ runs:
       with:
         python-version: ${{ inputs.python_version }}
 
+    # Every input reaches bash through env: and is quoted there. An input expression pasted
+    # into run: would let a crafted value (a branch name in a build path, say) run shell
+    # commands in a job that holds id-token: write.
     - name: Install the embeddedci SDK
       shell: bash
+      env:
+        SDK_REF: ${{ inputs.sdk_ref }}
       run: |
-        pip install --quiet \
-          "embeddedci @ git+https://github.com/embeddedci-com/embeddedci-python.git@${{ inputs.sdk_ref }}#subdirectory=packages/embeddedci"
+        if [ -n "$SDK_REF" ]; then
+          pkg="embeddedci @ git+https://github.com/embeddedci-com/embeddedci-python.git@${SDK_REF}#subdirectory=packages/embeddedci"
+        else
+          pkg="embeddedci==2.5.*"
+        fi
+        pip install --quiet "$pkg"
 
     - name: Publish firmware to embeddedci
       id: upload
@@ -86,15 +98,24 @@ runs:
         # Auth is the job's OIDC token; the workflow must grant `id-token: write`.
         # Failing here with a clear message beats uploading nothing silently.
         EMBEDDEDCI_ALLOW_MISSING_TOKEN: ${{ inputs.allow_missing_token }}
+        IN_FIRMWARE: ${{ inputs.firmware }}
+        IN_BUILD_TARGET: ${{ inputs.build_target }}
+        IN_OPENOCD_TARGET: ${{ inputs.openocd_target }}
+        IN_SWCLK: ${{ inputs.swclk }}
+        IN_SWDIO: ${{ inputs.swdio }}
+        IN_NRESET: ${{ inputs.nreset }}
+        IN_EFUSE: ${{ inputs.efuse }}
+        IN_NAME: ${{ inputs.name }}
+        IN_API_BASE: ${{ inputs.api_base }}
       run: |
-        args=(--firmware "${{ inputs.firmware }}")
-        [ -n "${{ inputs.build_target }}" ]   && args+=(--build-target   "${{ inputs.build_target }}")
-        [ -n "${{ inputs.openocd_target }}" ] && args+=(--openocd-target "${{ inputs.openocd_target }}")
-        [ -n "${{ inputs.swclk }}"  ] && args+=(--swclk  "${{ inputs.swclk }}")
-        [ -n "${{ inputs.swdio }}"  ] && args+=(--swdio  "${{ inputs.swdio }}")
-        [ -n "${{ inputs.nreset }}" ] && args+=(--nreset "${{ inputs.nreset }}")
-        [ -n "${{ inputs.efuse }}"  ] && args+=(--efuse  "${{ inputs.efuse }}")
-        [ -n "${{ inputs.name }}"   ] && args+=(--name   "${{ inputs.name }}")
-        [ -n "${{ inputs.api_base }}" ] && args+=(--api-base "${{ inputs.api_base }}")
+        args=(--firmware "$IN_FIRMWARE")
+        [ -n "$IN_BUILD_TARGET" ]   && args+=(--build-target   "$IN_BUILD_TARGET")
+        [ -n "$IN_OPENOCD_TARGET" ] && args+=(--openocd-target "$IN_OPENOCD_TARGET")
+        [ -n "$IN_SWCLK" ]  && args+=(--swclk  "$IN_SWCLK")
+        [ -n "$IN_SWDIO" ]  && args+=(--swdio  "$IN_SWDIO")
+        [ -n "$IN_NRESET" ] && args+=(--nreset "$IN_NRESET")
+        [ -n "$IN_EFUSE" ]  && args+=(--efuse  "$IN_EFUSE")
+        [ -n "$IN_NAME" ]   && args+=(--name   "$IN_NAME")
+        [ -n "$IN_API_BASE" ] && args+=(--api-base "$IN_API_BASE")
         [ "$EMBEDDEDCI_ALLOW_MISSING_TOKEN" = "true" ] && args+=(--allow-missing-token)
         embeddedci-upload-build "${args[@]}"
