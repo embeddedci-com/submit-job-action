@@ -6,7 +6,9 @@ GitHub Action that submits jobs to the EmbeddedCI server in two modes:
 
 ## Usage
 
-Ensure your workflow checks out the repository first.
+Ensure your workflow checks out the repository first. This action authenticates with the
+`api_key` input only, so the job needs no extra `permissions:` (unlike `upload-artifact`, which
+needs `id-token: write`).
 
 How the modes differ:
 
@@ -49,7 +51,7 @@ jobs:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `api_key` | Yes | - | API key for EmbeddedCI. Use `secrets.EMBEDDEDCI_API_KEY`. |
-| `api_url` | No | `https://api.embeddedci.com` | EmbeddedCI server base URL. Override for self-hosted or staging. |
+| `api_url` | No | `https://api.embeddedci.com` | EmbeddedCI server base URL. Override for self-hosted or staging. A value without a scheme gets `https://` prepended. |
 | `source_path` | No | empty | Path to what should be uploaded in archive mode. You can pass a directory (including `.`) and the action creates the archive automatically, or pass an existing archive file (`.tar.gz`, `.tgz`, `.tar`, `.zip`). |
 | `embeddedci_yaml` | No | empty | Pipeline YAML path. In YAML-only mode this is the repo file path (defaults to `embeddedci.yaml` when omitted). In archive mode this optionally overrides auto-detection (`embeddedci.yaml`). |
 | `ref` | No | branch name from GitHub context | Ref associated with the submission. Auto-detected from `GITHUB_HEAD_REF` (PRs) or `GITHUB_REF_NAME`. |
@@ -117,6 +119,9 @@ jobs:
 
 ## Outputs
 
+Outputs are only set when the server includes the matching field in its response; an unset
+output reads as an empty string in later steps.
+
 | Output | Description |
 |--------|-------------|
 | `job_id` | Set when the server returns a job id in the response. |
@@ -181,7 +186,24 @@ trusted in the EmbeddedCI web app under **BenchPod → GitHub Actions**; without
 Set `allow_missing_token: "true"` to downgrade that failure to a skip — useful for pull requests
 from forks, which cannot mint an OIDC token.
 
-Outputs `build_id`.
+| Input | Required | Default | Notes |
+|---|---|---|---|
+| `firmware` | Yes | - | Path to the built firmware (`.elf`, `.bin` or `.hex`). Siblings with the same stem (`.elf`, `.bin`, `.hex`, `.uf2`) are uploaded too. |
+| `build_target` | No | empty | Platform id recorded against the build, for example `stm32f4`. Shown on the Builds page. |
+| `openocd_target` | No | empty | OpenOCD target config for the DUT, for example `target/stm32f4x.cfg`. Pre-fills the flash dialog. |
+| `swclk` | No | empty | LA channel (1-14) wired to SWCLK. Pre-fills the flash dialog. |
+| `swdio` | No | empty | LA channel (1-14) wired to SWDIO. Pre-fills the flash dialog. |
+| `nreset` | No | empty | `true` when the target's NRST is wired to the pod's reset pin (DUT header J1 pin 22). Leave empty when it is not wired. An LA channel number from older workflows is still accepted and read as "wired". |
+| `efuse` | No | empty | Target-power eFuse rail: `1` = internal 5 V, `2` = external. |
+| `name` | No | server-side commit summary | Build name shown in the web UI. |
+| `api_base` | No | `https://www.embeddedci.com` | EmbeddedCI base URL. When empty, the SDK reads `BENCHPOD_API_BASE` from the environment before falling back to the public server. |
+| `sdk_ref` | No | empty | Tag, branch or commit of embeddedci-python to install instead of the PyPI release (see below). |
+| `python_version` | No | `3.12` | Python that `actions/setup-python` installs for the upload step. |
+| `allow_missing_token` | No | `false` | `true` succeeds with a skip instead of failing when no OIDC token is available (for example a fork PR). |
+
+| Output | Description |
+|---|---|
+| `build_id` | The embeddedci build id the artifacts were attached to. Empty when the upload was skipped by `allow_missing_token`. |
 
 The step installs the embeddedci SDK from PyPI (`embeddedci==2.5.*`). Set `sdk_ref` to a tag,
 branch or commit of [embeddedci-python](https://github.com/embeddedci-com/embeddedci-python) to
@@ -218,7 +240,7 @@ on:
       - "hardware/**.kicad_pcb"
 ```
 
-**Auth is an API key, not the OIDC token** the other actions use. EMI runs are filed under the
+**Auth is an API key, not the OIDC token** `upload-artifact` uses. EMI runs are filed under the
 organisation that owns the key, so the credential has to identify a person rather than a
 repository. Generate one in the web app under **Settings → API keys** with the `emi:analyze`
 scope, and store it as a repository secret.
