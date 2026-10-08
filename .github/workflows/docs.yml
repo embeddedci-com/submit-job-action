@@ -1,0 +1,18 @@
+name: docs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node ships on the runner image; the check has no dependencies, so no npm install.
+      - name: README covers every action input and output
+        run: node scripts/check-docs.mjs
