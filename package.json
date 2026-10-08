@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build": "ncc build index.js -o dist",
+    "test": "node scripts/check-docs.mjs",
     "prepare": "npm run build"
   },
   "keywords": [
