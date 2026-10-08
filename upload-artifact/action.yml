@@ -21,11 +21,11 @@ inputs:
     required: false
     default: ''
   swclk:
-    description: 'LA channel wired to SWCLK (1-12). Pre-fills the flash dialog.'
+    description: 'LA channel wired to SWCLK (1-14). Pre-fills the flash dialog.'
     required: false
     default: ''
   swdio:
-    description: 'LA channel wired to SWDIO (1-12). Pre-fills the flash dialog.'
+    description: 'LA channel wired to SWDIO (1-14). Pre-fills the flash dialog.'
     required: false
     default: ''
   nreset:
