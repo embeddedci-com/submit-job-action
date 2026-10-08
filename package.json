@@ -1,6 +1,6 @@
 {
   "name": "embeddedci-submit-job-action",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "GitHub Action to submit embeddedci.yaml to EmbeddedCI server",
   "type": "module",
   "main": "index.js",
@@ -12,7 +12,7 @@
     "github-action",
     "embeddedci"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@actions/core": "^3.0.0"
   },

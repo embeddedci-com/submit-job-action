@@ -145,9 +145,9 @@ The built action is in `dist/`. Commit `dist/` so the action works when used fro
 
 | Action | Use it for |
 |---|---|
-| `embeddedci-com/submit-job-action@main` | Submit a pipeline or source archive to the EmbeddedCI build system. |
-| `embeddedci-com/submit-job-action/upload-artifact@main` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
-| `embeddedci-com/submit-job-action/emi@main` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
+| `embeddedci-com/submit-job-action@v1` | Submit a pipeline or source archive to the EmbeddedCI build system. |
+| `embeddedci-com/submit-job-action/upload-artifact@v1` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
+| `embeddedci-com/submit-job-action/emi@v1` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
 
 ### `upload-artifact`
 
@@ -163,7 +163,7 @@ permissions:
 steps:
   - uses: actions/checkout@v5
   # ... your existing build ...
-  - uses: embeddedci-com/submit-job-action/upload-artifact@main
+  - uses: embeddedci-com/submit-job-action/upload-artifact@v1
     with:
       firmware: build/app.elf
       build_target: stm32f4
@@ -202,7 +202,7 @@ touches the layout.
 ```yaml
 steps:
   - uses: actions/checkout@v5
-  - uses: embeddedci-com/submit-job-action/emi@main
+  - uses: embeddedci-com/submit-job-action/emi@v1
     with:
       api_key: ${{ secrets.EMBEDDEDCI_API_KEY }}
       board: hardware/mainboard.kicad_pcb

@@ -1,0 +1,21 @@
+# Weekly version updates. github-actions covers the composite actions' own steps; npm covers the
+# Node action (rebuild dist/ with `npm run build` on each bump). Security updates arrive on their own.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /upload-artifact
+      - /emi
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
