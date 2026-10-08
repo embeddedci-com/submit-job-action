@@ -1,6 +1,6 @@
 {
   "name": "embeddedci-submit-job-action",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "GitHub Action to submit embeddedci.yaml to EmbeddedCI server",
   "type": "module",
   "main": "index.js",
