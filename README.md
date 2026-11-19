@@ -348,8 +348,6 @@ jobs:
         with:
           firmware: firmware/build/app.elf
       - uses: embeddedci-com/submit-job-action/ci@v1
-        env:
-          BENCHPOD_API_KEY: ${{ secrets.EMBEDDEDCI_API_KEY }}   # only for a suite with a flash step (see below)
         with:
           pod: embeddedci:benchpod-a1b2c3
           firmware: build:${{ steps.upload.outputs.build_id }}
@@ -358,9 +356,10 @@ jobs:
 ```
 
 Over embeddedci.com the UART and power-profile steps of the suite need a direct link to the
-pod: run those checks from a pytest step, which reaches them through the cloud tunnel. A flash
-step on a cloud pod needs an API key for now: set `env: BENCHPOD_API_KEY: ${{ secrets.EMBEDDEDCI_API_KEY }}`
-on the step, which the CLI then uses instead of the OIDC token.
+pod: run those checks from a pytest step, which reaches them through the cloud tunnel. The
+suite's flash step works with the OIDC token too (benchpod CLI 0.9.4 and later): embeddedci.com
+flashes the uploaded build through the pod, for a pod on the repository's list and a build from
+a repository the organization trusts.
 
 | Input | Default | Notes |
 |---|---|---|
