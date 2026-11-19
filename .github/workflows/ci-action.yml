@@ -1,7 +1,9 @@
 name: ci-action
 
 # Smoke test of the ci action: it installs the benchpod CLI from its latest release for this
-# runner and runs `benchpod ci --help` through the action's run step. No pod is touched.
+# runner and runs `benchpod ci --help` through the action's run step. No pod is touched. The
+# step may fail (a CLI release without `benchpod ci`); what is checked is that the CLI got
+# installed and the outputs were written either way.
 on:
   pull_request:
     paths: ['ci/**', '.github/workflows/ci-action.yml']
@@ -22,6 +24,7 @@ jobs:
         run: |
           printf 'version: 1\nsuite: smoke\ndut: none\nsteps:\n  - wait: 1ms\n' > benchpod-ci.yaml
       - id: ci
+        continue-on-error: true
         uses: ./ci
         with:
           extra-args: --help
@@ -31,5 +34,7 @@ jobs:
           RUN_DIR: ${{ steps.ci.outputs.run-dir }}
         run: |
           benchpod --version
-          test "$CODE" = 0
+          echo "benchpod ci --help exited with $CODE"
+          test -n "$CODE"
           test -n "$RUN_DIR"
+          if benchpod ci --help >/dev/null 2>&1; then test "$CODE" = 0; fi

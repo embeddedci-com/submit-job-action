@@ -143,7 +143,8 @@ runs:
         OUT: ${{ inputs.out }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
-        set -uo pipefail
+        # Not -e (the runner's default for bash): the exit code is an output, read after the run.
+        set +e -uo pipefail
         out="${OUT:-${RUNNER_TEMP}/benchpod-ci-run-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}}"
         args=(ci -f "$SUITE_FILE" --out "$out")
         [ -n "$POD" ] && args+=(--pod "$POD")
