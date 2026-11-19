@@ -19,7 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: A suite file for the action to look at
-        run: printf 'version: 1\nsuite: smoke\ndut: none\nsteps:\n  - wait: 1ms\n' > benchpod-ci.yaml
+        run: |
+          printf 'version: 1\nsuite: smoke\ndut: none\nsteps:\n  - wait: 1ms\n' > benchpod-ci.yaml
       - id: ci
         uses: ./ci
         with:
