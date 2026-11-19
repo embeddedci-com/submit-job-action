@@ -17,6 +17,7 @@ const actions = [
   { file: 'action.yml', start: null, end: '## Actions in this repository' },
   { file: 'upload-artifact/action.yml', start: '### `upload-artifact`', end: '\n### ' },
   { file: 'emi/action.yml', start: '### `emi`', end: '\n### ' },
+  { file: 'ci/action.yml', start: '### `ci`', end: '\n### ' },
 ];
 
 export function section(text, start, end) {
