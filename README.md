@@ -153,6 +153,7 @@ The built action is in `dist/`. Commit `dist/` so the action works when used fro
 | `embeddedci-com/submit-job-action@v1` | Submit a pipeline or source archive to the EmbeddedCI build system. |
 | `embeddedci-com/submit-job-action/upload-artifact@v1` | Publish a firmware you built yourself, so it appears in the BenchPod flash dropdown. |
 | `embeddedci-com/submit-job-action/emi@v1` | Run EMI analysis on a KiCad or Gerber board and gate the build on the findings. |
+| `embeddedci-com/submit-job-action/ci@v1` | Run a `benchpod-ci.yaml` suite on a BenchPod and record the run on embeddedci.com. |
 
 ### `upload-artifact`
 
@@ -271,3 +272,112 @@ Implementation note: a composite action calling the EMI REST API with `curl` and
 already on every runner. Unlike `upload-artifact` there is no SDK to wrap — nothing else
 implements this flow — so there is no second copy to drift, and no build step between editing
 `emi/emi-analyze.sh` and the change taking effect.
+
+### `ci`
+
+Runs a hardware-in-the-loop suite defined in a `benchpod-ci.yaml` (flash the DUT, boot and
+power checks, pytest and other test commands) on a BenchPod with the
+[benchpod CLI](https://github.com/embeddedci-com/benchpod-cli)'s `benchpod ci`. The action
+installs the CLI from its GitHub release for the runner's OS and CPU (Linux, macOS, Windows;
+x86_64 and arm64), checks it against the release's `checksums.txt`, and runs it. The CLI:
+
+- signs in with the job's OIDC token when no `BENCHPOD_API_KEY` is set, so the job needs
+  `permissions: id-token: write`, and the repository must be trusted by your organization on
+  embeddedci.com, with the pods it may drive;
+- holds the pod's lease for the whole run, so the web app and other runs cannot drive it;
+- uploads the run (cases, measurements, logs, traces of failed cases) and prints its URL;
+- writes a summary to the job's step summary: outcome, failed cases, measurements outside
+  their limits or beyond their drift, and the baseline compare;
+- exits with the suite's exit code: `0` passed, `1` setup error, `2` a test failed, `3` a gated
+  measurement drifted against the baseline, `4` the run is not valid. The step fails on any
+  code but `0`.
+
+The suite file format, the exit codes and the run folder are documented in the CLI's README
+("CI runs: `benchpod ci`").
+
+**Self-hosted runner next to a LAN pod.** The runner reaches the pod on the bench network; the
+OIDC sign-in is only used for the upload.
+
+```yaml
+name: hil
+on: [push]
+
+permissions:
+  id-token: write   # sign-in for the run upload
+  contents: read
+
+jobs:
+  hil:
+    runs-on: [self-hosted, bench]
+    steps:
+      - uses: actions/checkout@v5
+      - run: make -C firmware
+      - id: ci
+        uses: embeddedci-com/submit-job-action/ci@v1
+        with:
+          pod: benchpod-a1b2c3          # or its address, 192.168.1.50
+          firmware: firmware/build/app.elf
+          python-version: "3.12"
+          sdk: embeddedci
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchpod-ci-run
+          path: ${{ steps.ci.outputs.run-dir }}
+```
+
+**GitHub-hosted runner with a cloud pod.** The pod is reached through embeddedci.com by its
+name; the OIDC token must be allowed to drive it (the trusted repository's pods).
+
+```yaml
+name: hil-cloud
+on: [pull_request]
+
+permissions:
+  id-token: write   # sign-in for the cloud pod and the upload
+  contents: read
+
+jobs:
+  hil:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: make -C firmware
+      - id: upload
+        uses: embeddedci-com/submit-job-action/upload-artifact@v1
+        with:
+          firmware: firmware/build/app.elf
+      - uses: embeddedci-com/submit-job-action/ci@v1
+        env:
+          BENCHPOD_API_KEY: ${{ secrets.EMBEDDEDCI_API_KEY }}   # only for a suite with a flash step (see below)
+        with:
+          pod: embeddedci:benchpod-a1b2c3
+          firmware: build:${{ steps.upload.outputs.build_id }}
+          python-version: "3.12"
+          sdk: embeddedci
+```
+
+Over embeddedci.com the UART and power-profile steps of the suite need a direct link to the
+pod: run those checks from a pytest step, which reaches them through the cloud tunnel. A flash
+step on a cloud pod needs an API key for now: set `env: BENCHPOD_API_KEY: ${{ secrets.EMBEDDEDCI_API_KEY }}`
+on the step, which the CLI then uses instead of the OIDC token.
+
+| Input | Default | Notes |
+|---|---|---|
+| `file` | `benchpod-ci.yaml` | The suite definition, relative to `working-directory`. |
+| `pod` | empty | A pod name (`benchpod-a1b2c3`), a LAN address, `usb`, or `embeddedci:<name>` for a cloud pod. Empty: the CLI's default (the one pod on the LAN). |
+| `firmware` | empty | Flash this image instead of the file's `firmware.file`, or `build:<id>` for a build uploaded to embeddedci.com. |
+| `cli-version` | `latest` | The benchpod CLI release, for example `v0.9.4`. |
+| `python-version` | empty | Set up this Python with `actions/setup-python` first. Empty: the runner's Python. |
+| `sdk` | empty | pip requirement for the BenchPod SDK, for example `embeddedci` or `embeddedci==3.0.4`. Installed when the suite has pytest steps and `python-version` or `sdk` is set. |
+| `upload` | `auto` | `auto`: upload as the file's `upload:` says (when signed in). `false`: do not upload. |
+| `out` | runner temp | The run folder. |
+| `extra-args` | empty | More arguments for `benchpod ci`, for example `--repeat 3 --keep-going`. |
+| `working-directory` | `.` | The directory the suite runs in. |
+
+| Output | Description |
+|---|---|
+| `run-url` | The run's page on embeddedci.com; empty when it was not uploaded. |
+| `outcome` | `passed`, `failed`, `error` or `invalid`; empty when no run.json was written. |
+| `exit-code` | The exit code of `benchpod ci`. |
+| `run-dir` | The run folder (run.json, junit.xml, logs, traces), for `actions/upload-artifact`. |

@@ -1,0 +1,177 @@
+name: 'EmbeddedCI benchpod ci'
+description: 'Run a benchpod-ci.yaml suite on a BenchPod: flash, boot checks, power checks, pytest; upload the run to embeddedci.com'
+author: 'EmbeddedCI'
+
+# Composite bash: it installs the benchpod CLI from its GitHub release for the runner's OS and
+# CPU, checks the download against the release's checksums.txt, and runs `benchpod ci`. The CLI
+# does the rest: it signs in with the job's OIDC token (permissions: id-token: write) when no
+# BENCHPOD_API_KEY is set, holds the pod's lease, uploads the run and writes the step summary.
+
+inputs:
+  file:
+    description: 'The suite definition, relative to the working directory.'
+    required: false
+    default: 'benchpod-ci.yaml'
+  pod:
+    description: 'The pod: a name (benchpod-a1b2c3), a LAN address, usb, or embeddedci:<name> for a cloud pod. Empty: the default the CLI finds (the one pod on the LAN).'
+    required: false
+    default: ''
+  firmware:
+    description: 'Flash this image instead of the file''s firmware.file, or build:<id> for a build uploaded to embeddedci.com.'
+    required: false
+    default: ''
+  cli-version:
+    description: 'The benchpod CLI release to install, for example v0.9.4; latest for the newest release.'
+    required: false
+    default: 'latest'
+  python-version:
+    description: 'Set up this Python (actions/setup-python) before the run. Empty: use the Python on the runner.'
+    required: false
+    default: ''
+  sdk:
+    description: 'pip requirement for the BenchPod SDK, installed when the suite has pytest steps and python-version or sdk is set, for example embeddedci or embeddedci==3.0.4.'
+    required: false
+    default: ''
+  upload:
+    description: 'auto: upload as the file''s upload: says (when signed in); false: do not upload (--no-upload).'
+    required: false
+    default: 'auto'
+  out:
+    description: 'The run folder. Empty: a folder under the runner''s temp directory.'
+    required: false
+    default: ''
+  extra-args:
+    description: 'More arguments for benchpod ci, for example --repeat 3 --keep-going.'
+    required: false
+    default: ''
+  working-directory:
+    description: 'The directory to run in.'
+    required: false
+    default: '.'
+
+outputs:
+  run-url:
+    description: 'The run''s page on embeddedci.com; empty when it was not uploaded.'
+    value: ${{ steps.run.outputs.run-url }}
+  outcome:
+    description: 'The run''s outcome: passed, failed, error or invalid (empty when no run.json was written).'
+    value: ${{ steps.run.outputs.outcome }}
+  exit-code:
+    description: 'The exit code of benchpod ci: 0 passed, 1 setup error, 2 test failure, 3 drift beyond a gated baseline allowance, 4 invalid run.'
+    value: ${{ steps.run.outputs.exit-code }}
+  run-dir:
+    description: 'The run folder (run.json, junit.xml, logs, traces), for actions/upload-artifact.'
+    value: ${{ steps.run.outputs.run-dir }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      if: inputs.python-version != ''
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install the BenchPod SDK
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SUITE_FILE: ${{ inputs.file }}
+        SDK: ${{ inputs.sdk }}
+        PYTHON_VERSION: ${{ inputs.python-version }}
+      run: |
+        set -euo pipefail
+        if ! grep -Eq '^[[:space:]]*(-[[:space:]]*)?pytest[[:space:]]*:' "$SUITE_FILE" 2>/dev/null; then
+          echo "The suite has no pytest steps: no SDK needed."
+          exit 0
+        fi
+        if [ -z "$SDK" ] && [ -z "$PYTHON_VERSION" ]; then
+          echo "The suite has pytest steps; using the runner's Python as it is (set sdk or python-version to install the SDK)."
+          exit 0
+        fi
+        py=python3
+        command -v "$py" >/dev/null 2>&1 || py=python
+        "$py" -m pip install --upgrade "${SDK:-embeddedci}"
+
+    - name: Install the benchpod CLI
+      shell: bash
+      env:
+        CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        set -euo pipefail
+        case "${RUNNER_OS}" in
+          Linux) os=Linux; ext=tar.gz ;;
+          macOS) os=Darwin; ext=tar.gz ;;
+          Windows) os=Windows; ext=zip ;;
+          *) echo "::error::unsupported runner OS ${RUNNER_OS}"; exit 1 ;;
+        esac
+        case "${RUNNER_ARCH}" in
+          X64) arch=x86_64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::unsupported runner CPU ${RUNNER_ARCH} (the CLI is built for x86_64 and arm64)"; exit 1 ;;
+        esac
+        asset="benchpod_${os}_${arch}.${ext}"
+        if [ -z "$CLI_VERSION" ] || [ "$CLI_VERSION" = "latest" ]; then
+          base="https://github.com/embeddedci-com/benchpod-cli/releases/latest/download"
+        else
+          tag="$CLI_VERSION"; case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+          base="https://github.com/embeddedci-com/benchpod-cli/releases/download/${tag}"
+        fi
+        dir="${RUNNER_TEMP}/benchpod-cli"
+        rm -rf "$dir" && mkdir -p "$dir"
+        curl -fsSL --retry 3 -o "$dir/$asset" "$base/$asset"
+        curl -fsSL --retry 3 -o "$dir/checksums.txt" "$base/checksums.txt"
+        want=$(grep " ${asset}\$" "$dir/checksums.txt" | awk '{print $1}')
+        if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$dir/$asset" | awk '{print $1}');
+        else got=$(shasum -a 256 "$dir/$asset" | awk '{print $1}'); fi
+        if [ -z "$want" ] || [ "$want" != "$got" ]; then
+          echo "::error::${asset}: checksum mismatch (want ${want:-none}, got ${got})"; exit 1
+        fi
+        if [ "$ext" = zip ]; then unzip -q -o "$dir/$asset" -d "$dir"; else tar -xzf "$dir/$asset" -C "$dir"; fi
+        echo "$dir" >> "$GITHUB_PATH"
+        "$dir/benchpod" --version
+
+    - name: Run benchpod ci
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SUITE_FILE: ${{ inputs.file }}
+        POD: ${{ inputs.pod }}
+        FIRMWARE: ${{ inputs.firmware }}
+        UPLOAD: ${{ inputs.upload }}
+        OUT: ${{ inputs.out }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        # Not -e (the runner's default for bash): the exit code is an output, read after the run.
+        set +e -uo pipefail
+        out="${OUT:-${RUNNER_TEMP}/benchpod-ci-run-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}}"
+        args=(ci -f "$SUITE_FILE" --out "$out")
+        [ -n "$POD" ] && args+=(--pod "$POD")
+        [ -n "$FIRMWARE" ] && args+=(--firmware "$FIRMWARE")
+        case "$UPLOAD" in
+          false) args+=(--no-upload) ;;
+          auto|true|'') ;;
+          *) echo "::error::upload must be auto or false, got ${UPLOAD}"; exit 1 ;;
+        esac
+        # shellcheck disable=SC2206 # extra-args are split on spaces on purpose
+        [ -n "$EXTRA_ARGS" ] && args+=($EXTRA_ARGS)
+        benchpod "${args[@]}"
+        code=$?
+        outcome="" url=""
+        if [ -f "$out/run.json" ]; then
+          if command -v jq >/dev/null 2>&1; then
+            outcome=$(jq -r '.results.outcome // ""' "$out/run.json")
+            url=$(jq -r '.uploaded.url // ""' "$out/run.json")
+          else
+            outcome=$(grep -m1 '"outcome"' "$out/run.json" | sed 's/.*"outcome": *"\([^"]*\)".*/\1/')
+            url=$(grep '"url"' "$out/run.json" | tail -1 | sed 's/.*"url": *"\([^"]*\)".*/\1/')
+          fi
+        fi
+        {
+          echo "exit-code=$code"
+          echo "outcome=$outcome"
+          echo "run-url=$url"
+          echo "run-dir=$out"
+        } >> "$GITHUB_OUTPUT"
+        exit "$code"
