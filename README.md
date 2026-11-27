@@ -176,7 +176,7 @@ steps:
       openocd_target: target/stm32f4x.cfg
       swclk: "11"
       swdio: "12"
-      efuse: "1"
+      supply: 5v
 ```
 
 The firmware's siblings (`.elf` / `.bin` / `.hex` / `.uf2` with the same stem) are uploaded
@@ -195,7 +195,8 @@ from forks, which cannot mint an OIDC token.
 | `swclk` | No | empty | LA channel (1-14) wired to SWCLK. Pre-fills the flash dialog. |
 | `swdio` | No | empty | LA channel (1-14) wired to SWDIO. Pre-fills the flash dialog. |
 | `nreset` | No | empty | `true` when the target's NRST is wired to the pod's reset pin (DUT header J1 pin 22). Leave empty when it is not wired. An LA channel number from older workflows is still accepted and read as "wired". |
-| `efuse` | No | empty | Target-power eFuse rail: `1` = internal 5 V, `2` = external. |
+| `supply` | No | empty | Power supply the flash dialog switches on first: `5v` or `external`. |
+| `efuse` | No | empty | Deprecated, use `supply`: `1` = `5v`, `2` = `external`. Not together with `supply`. |
 | `name` | No | server-side commit summary | Build name shown in the web UI. |
 | `api_base` | No | `https://www.embeddedci.com` | EmbeddedCI base URL. When empty, the SDK reads `BENCHPOD_API_BASE` from the environment before falling back to the public server. |
 | `sdk_ref` | No | empty | Tag, branch or commit of embeddedci-python to install instead of the PyPI release (see below). |
