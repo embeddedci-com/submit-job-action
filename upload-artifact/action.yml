@@ -36,8 +36,14 @@ inputs:
       still accepted and read as "wired".
     required: false
     default: ''
+  supply:
+    description: >-
+      Power supply the flash dialog switches on first: 5v (the pod's 5 V) or
+      external (your own supply). Pre-fills the flash dialog.
+    required: false
+    default: ''
   efuse:
-    description: 'Target-power eFuse rail: 1 = internal 5V, 2 = external.'
+    description: 'Deprecated, use supply. 1 = 5v, 2 = external.'
     required: false
     default: ''
   name:
@@ -104,6 +110,7 @@ runs:
         IN_SWCLK: ${{ inputs.swclk }}
         IN_SWDIO: ${{ inputs.swdio }}
         IN_NRESET: ${{ inputs.nreset }}
+        IN_SUPPLY: ${{ inputs.supply }}
         IN_EFUSE: ${{ inputs.efuse }}
         IN_NAME: ${{ inputs.name }}
         IN_API_BASE: ${{ inputs.api_base }}
@@ -114,6 +121,17 @@ runs:
         [ -n "$IN_SWCLK" ]  && args+=(--swclk  "$IN_SWCLK")
         [ -n "$IN_SWDIO" ]  && args+=(--swdio  "$IN_SWDIO")
         [ -n "$IN_NRESET" ] && args+=(--nreset "$IN_NRESET")
+        if [ -n "$IN_SUPPLY" ] && [ -n "$IN_EFUSE" ]; then
+          echo "::error::Give supply or efuse, not both (efuse is the old name of supply)."
+          exit 1
+        fi
+        # The upload records the supply as the eFuse number, which every uploader version takes.
+        case "$IN_SUPPLY" in
+          5v) IN_EFUSE=1 ;;
+          external) IN_EFUSE=2 ;;
+          "") ;;
+          *) echo "::error::supply must be 5v or external here (got '$IN_SUPPLY')."; exit 1 ;;
+        esac
         [ -n "$IN_EFUSE" ]  && args+=(--efuse  "$IN_EFUSE")
         [ -n "$IN_NAME" ]   && args+=(--name   "$IN_NAME")
         [ -n "$IN_API_BASE" ] && args+=(--api-base "$IN_API_BASE")
